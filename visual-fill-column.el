@@ -7,8 +7,8 @@
 ;; Author: Joost Kremers <joostkremers@fastmail.fm>
 ;; Maintainer: Joost Kremers <joostkremers@fastmail.fm>
 ;; Created: 2015
-;; Version: 1.9
-;; Package-Requires: ((emacs "24.3"))
+;; Version: 2.0
+;; Package-Requires: ((emacs "25.1"))
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -88,32 +88,15 @@ in which Visual Line mode is active as well."
 (defun visual-fill-column-mode--enable ()
   "Set up `visual-fill-column-mode' for the current buffer."
   (add-hook 'window-configuration-change-hook #'visual-fill-column--adjust-window 'append 'local)
+  (set-window-parameter nil 'min-margins '(0 . 0))
   (visual-fill-column--adjust-window))
 
 (defun visual-fill-column-mode--disable ()
   "Disable `visual-fill-column-mode' for the current buffer."
   (remove-hook 'window-configuration-change-hook #'visual-fill-column--adjust-window 'local)
   (set-window-fringes (get-buffer-window (current-buffer)) nil)
-  (set-window-margins (get-buffer-window (current-buffer)) nil))
-
-(defun visual-fill-column-split-window (&optional window size side pixelwise)
-  "Split WINDOW, unsetting its margins first.
-SIZE, SIDE, and PIXELWISE are passed on to `split-window'.  This
-function is for use in the window parameter `split-window'."
-  (let ((horizontal (memq side '(t left right)))
-	margins new)
-    (when horizontal
-      ;; Reset margins.
-      (setq margins (window-margins window))
-      (set-window-margins window nil))
-    ;; Now try to split the window.
-    (set-window-parameter window 'split-window nil)
-    (unwind-protect
-	(setq new (split-window window size side pixelwise))
-      (set-window-parameter window 'split-window #'visual-fill-column-split-window)
-      ;; Restore old margins if we failed.
-      (when (and horizontal (not new))
-	(set-window-margins window (car margins) (cdr margins))))))
+  (set-window-margins (get-buffer-window (current-buffer)) nil)
+  (set-window-parameter (get-buffer-window (current-buffer)) 'min-margins nil))
 
 ;;;###autoload
 (defun visual-fill-column-split-window-sensibly (&optional window)
@@ -139,11 +122,10 @@ windows with wide margins."
 (defun visual-fill-column--adjust-window ()
   "Adjust the window margins and fringes."
   ;; Only run when we're really looking at a buffer that has v-f-c-mode enabled. See #22.
-  (when (buffer-local-value 'visual-fill-column-mode (window-buffer (selected-window)))
-    (set-window-fringes (get-buffer-window (current-buffer)) nil nil visual-fill-column-fringes-outside-margins)
-    (if (>= emacs-major-version 25)
-        (set-window-parameter (get-buffer-window (current-buffer)) 'split-window #'visual-fill-column-split-window))
-    (visual-fill-column--set-margins)))
+  (if (buffer-local-value 'visual-fill-column-mode (window-buffer (selected-window)))
+      (visual-fill-column--set-margins)
+    (set-window-parameter (selected-window) 'min-margins nil)
+    ))
 
 (defun visual-fill-column-adjust (&optional _inc)
   "Adjust the window margins and fringes.
@@ -197,7 +179,12 @@ and `text-scale-mode-step'."
       (setq left right)
       (setq right 0))
 
-    (set-window-margins window left right)))
+    ;; Set the margins.
+    (set-window-margins window left right)
+
+    ;; Set the minimun margin width and the fringes.
+    (set-window-parameter window 'min-margins '(0 . 0))
+    (set-window-fringes window nil nil visual-fill-column-fringes-outside-margins)))
 
 (provide 'visual-fill-column)
 
